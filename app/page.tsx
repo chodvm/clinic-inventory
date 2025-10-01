@@ -6,7 +6,6 @@ import SearchBar from '@/components/SearchBar'
 import InventoryFilters, { type Filters } from '@/components/InventoryFilters'
 import { getSupabase } from '@/lib/supabaseClient'
 import { REASONS, type ReasonCode } from '@/lib/reasons'
-import ThemeToggle from '@/components/ThemeToggle'
 
 type Item = {
   id: string
@@ -100,7 +99,7 @@ export default function InventoryList() {
 
   return (
     <div className="space-y-4">
-      {/* HEADER: Inventory title + Search + Theme toggle */}
+      {/* HEADER: Inventory title + Search */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-semibold">Inventory</h1>
         <div className="flex items-center gap-2">
