@@ -1,8 +1,6 @@
 'use client'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
-import SearchBar from '@/components/SearchBar'
-import InventoryFilters, { type Filters } from '@/components/InventoryFilters'
+
+import { useEffect, useMemo, useState } from 'react'
 import { getSupabase } from '@/lib/supabaseClient'
 
 type Item = {
@@ -10,160 +8,155 @@ type Item = {
   item_name: string
   sku: string | null
   qty_on_hand: number
-  par_level_min: number | null
-  storage_location_id: string | null
-  category_id: string | null
-  vendor_id: string | null
-  storage_locations?: { name: string } | null 
 }
 
-const PAGE_SIZE = 30
-type SortKey = 'item_name' | 'qty_on_hand' | 'par_level_min'
-type SortDir = 'asc' | 'desc'
-
-export default function InventoryList() {
+export default function CountsPage() {
   const [items, setItems] = useState<Item[]>([])
+  const [counts, setCounts] = useState<Record<string, number | ''>>({})
+  const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [q, setQ] = useState('')
-  const [filters, setFilters] = useState<Filters>({})
-  const [sortKey, setSortKey] = useState<SortKey>('item_name')
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
-  const [page, setPage] = useState(0)
-  const [totalLoaded, setTotalLoaded] = useState(0)
-  const [hasMore, setHasMore] = useState(true)
 
-  const fetchPage = useCallback(async (reset = false) => {
+  useEffect(() => {
     const sb = getSupabase()
     setLoading(true)
+    sb.from('inventory_items')
+      .select('id,item_name,sku,qty_on_hand')
+      .order('item_name', { ascending: true })
+      .then(({ data, error }) => {
+        setLoading(false)
+        if (!error) setItems((data as Item[]) ?? [])
+      })
+  }, [])
 
-    let query = getSupabase().from('inventory_items')
-      .select('id,item_name,sku,qty_on_hand,par_level_min,storage_location_id,category_id,vendor_id,storage_locations(name)', { count: 'exact' })
+  // Helper to get variance quickly
+  const getVariance = (id: string, systemQty: number) => {
+    const v = counts[id]
+    if (v === '' || v === undefined) return null
+    return (v as number) - systemQty
+  }
 
-    if (q && q.trim()) {
-      query = query.or(`item_name.ilike.%${q}%,sku.ilike.%${q}%`)
-    }
-    if (filters.categoryId) query = query.eq('category_id', filters.categoryId)
-    if (filters.vendorId) query = query.eq('vendor_id', filters.vendorId)
-    if (filters.locationId) query = query.eq('storage_location_id', filters.locationId)
-
-    query = query.order(sortKey, { ascending: sortDir === 'asc' })
-
-    const from = (reset ? 0 : page * PAGE_SIZE)
-    const to = from + PAGE_SIZE - 1
-    if (!filters.lowStockOnly) {
-      query = query.range(from, to)
-    }
-
-    const { data, count, error } = await query
-    setLoading(false)
-    if (error) { console.error(error); return }
-
-    let newList = (reset ? (data ?? []) : [...items, ...(data ?? [])]) as Item[]
-    setItems(newList)
-    setTotalLoaded(newList.length)
-
-    if (!filters.lowStockOnly) {
-      setHasMore((count ?? 0) > newList.length)
-      setPage(reset ? 1 : page + 1)
-    } else {
-      setHasMore(false)
-      setPage(0)
-    }
-  }, [filters.categoryId, filters.vendorId, filters.locationId, filters.lowStockOnly, items, page, q, sortDir, sortKey])
-
-  useEffect(() => { fetchPage(true) }, []) // initial
-  useEffect(() => { fetchPage(true) }, [q, JSON.stringify(filters), sortKey, sortDir]) // re-run on changes
-
-  const visibleItems = useMemo(() => {
-    if (!filters.lowStockOnly) return items
-    return items.filter(it => typeof it.par_level_min === 'number' && it.qty_on_hand <= (it.par_level_min ?? 0))
-  }, [items, filters.lowStockOnly])
-
-  const lowCount = useMemo(
-    () => visibleItems.filter(it => typeof it.par_level_min === 'number' && it.qty_on_hand <= (it.par_level_min ?? 0)).length,
-    [visibleItems]
+  // Optional: precompute how many have entries
+  const enteredCount = useMemo(
+    () => Object.values(counts).filter(v => v !== '' && v !== undefined).length,
+    [counts]
   )
 
-  async function adjustItem(itemId: string, delta: number) {
-    const reason = window.prompt(`Reason for ${delta > 0 ? 'adding' : 'deducting'} ${Math.abs(delta)}?`)
-    if (!reason || !reason.trim()) return
-    const fn = delta > 0 ? 'add_inventory' : 'deduct_inventory'
-    const { error } = await getSupabase().rpc(fn, { p_item_id: itemId, p_qty: Math.abs(delta), p_reason: reason })
-    if (error) { alert(error.message); return }
-    setItems(prev => prev.map(it => it.id === itemId ? { ...it, qty_on_hand: it.qty_on_hand + delta } : it))
+  async function submitCounts() {
+    setSaving(true)
+    try {
+      const sb = getSupabase()
+      const updates = Object.entries(counts).filter(([, v]) => v !== '' && v !== undefined)
+      for (const [id, counted] of updates) {
+        // Re-read current qty for concurrency safety
+        const { data: row, error: readErr } = await sb
+          .from('inventory_items')
+          .select('qty_on_hand')
+          .eq('id', id)
+          .single()
+        if (readErr || !row) continue
+
+        const delta = (counted as number) - row.qty_on_hand
+        if (delta !== 0) {
+          const fn = delta > 0 ? 'add_inventory' : 'deduct_inventory'
+          const { error: rpcErr } = await sb.rpc(fn, {
+            p_item_id: id,
+            p_qty: Math.abs(delta),
+            p_reason: 'Cycle count adjustment'
+          })
+          if (rpcErr) throw rpcErr
+        }
+      }
+      setCounts({})
+      alert('Counts submitted.')
+      // reload list to reflect new system quantities
+      const { data } = await getSupabase()
+        .from('inventory_items')
+        .select('id,item_name,sku,qty_on_hand')
+        .order('item_name', { ascending: true })
+      setItems((data as Item[]) ?? [])
+    } catch (e: any) {
+      alert(e?.message ?? 'Error submitting counts')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-semibold">Inventory</h1>
-        <SearchBar onSearch={setQ} />
-      </div>
-
-      <InventoryFilters value={filters} onChange={setFilters} />
-
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-        <div className="text-sm opacity-80">
-          {loading ? 'Loading…' : `${visibleItems.length} item${visibleItems.length === 1 ? '' : 's'}${hasMore ? '…' : ''}`}
-          {filters.lowStockOnly ? ' (low-stock view)' : ''}
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="text-sm">Low stock in view:</div>
-          <span className="badge">{lowCount}</span>
-          <div className="ml-4">
-            <label className="text-xs opacity-70 block">Sort by</label>
-            <div className="flex gap-2">
-              <select
-                className="input"
-                value={`${sortKey}:${sortDir}`}
-                onChange={(e) => {
-                  const [k, d] = e.target.value.split(':') as [SortKey, SortDir]
-                  setSortKey(k)
-                  setSortDir(d)
-                }}
-              >
-                <option value="item_name:asc">Name ↑</option>
-                <option value="item_name:desc">Name ↓</option>
-                <option value="qty_on_hand:asc">Qty ↑</option>
-                <option value="qty_on_hand:desc">Qty ↓</option>
-                <option value="par_level_min:asc">Par ↑</option>
-                <option value="par_level_min:desc">Par ↓</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
+      <h1 className="text-2xl font-semibold">Cycle Counts</h1>
 
       <div className="card">
-        {loading && items.length === 0 && (<div className="opacity-80">Loading…</div>)}
-        {!loading && visibleItems.length === 0 && (<div className="opacity-70">No matching items.</div>)}
+        {/* Header */}
+        <div className="hidden sm:grid grid-cols-12 gap-3 px-3 py-2 text-xs uppercase tracking-wide opacity-70">
+          <div className="col-span-6">Name</div>
+          <div className="col-span-2 text-right">System</div>
+          <div className="col-span-2 text-right">Counted</div>
+          <div className="col-span-2 text-right">Variance</div>
+        </div>
 
-        <div className="grid grid-cols-1 gap-3">
-          {visibleItems.map(it => {
-            const low = typeof it.par_level_min === 'number' && it.qty_on_hand <= (it.par_level_min ?? 0)
+        {/* Rows */}
+        <div className="divide-y divide-white/10">
+          {loading && (
+            <div className="px-3 py-3 opacity-80">Loading…</div>
+          )}
+
+          {!loading && items.length === 0 && (
+            <div className="px-3 py-3 opacity-70">No items found.</div>
+          )}
+
+          {!loading && items.map(it => {
+            const variance = getVariance(it.id, it.qty_on_hand)
+            const varianceText =
+              variance === null ? '—' :
+              variance > 0 ? `+${variance}` :
+              `${variance}`
+
             return (
-              <div key={it.id} className="p-3 border border-white/10 rounded-xl hover:border-white/30 transition">
-                <div className="font-medium line-clamp-1">{it.item_name}</div>
-                <div className="text-xs opacity-70">SKU: {it.sku ?? '—'}</div>
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="badge">{it.qty_on_hand} on hand</span>
-                  {low && <span className="badge">Low</span>}
+              <div key={it.id} className="px-3 py-3 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                {/* Name (with SKU as small secondary line) */}
+                <div className="sm:col-span-6">
+                  <div className="font-medium">{it.item_name}</div>
+                  <div className="text-xs opacity-70">SKU: {it.sku ?? '—'}</div>
                 </div>
-                <div className="mt-3 flex items-center gap-2">
-                  <button className="btn text-sm" onClick={() => adjustItem(it.id, +1)}>+1</button>
-                  <button className="btn text-sm" onClick={() => adjustItem(it.id, -1)}>−1</button>
-                  <Link href={`/items/${it.id}`} className="btn text-sm ml-auto">Details</Link>
+
+                {/* System qty */}
+                <div className="sm:col-span-2 sm:text-right">
+                  <span className="badge">{it.qty_on_hand}</span>
+                </div>
+
+                {/* Counted input */}
+                <div className="sm:col-span-2 sm:text-right">
+                  <input
+                    className="input text-right"
+                    inputMode="numeric"
+                    type="number"
+                    min="0"
+                    placeholder="Counted"
+                    value={counts[it.id] ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      // Allow blank (''), otherwise coerce to number >= 0
+                      const next = val === '' ? '' : Math.max(0, parseInt(val, 10) || 0)
+                      setCounts(prev => ({ ...prev, [it.id]: next }))
+                    }}
+                  />
+                </div>
+
+                {/* Variance */}
+                <div className="sm:col-span-2 sm:text-right">
+                  <span className="badge">{varianceText}</span>
                 </div>
               </div>
             )
           })}
         </div>
 
-        {!filters.lowStockOnly && hasMore && (
-          <div className="mt-4 flex justify-center">
-            <button className="btn" disabled={loading} onClick={() => fetchPage(false)}>Load more</button>
-          </div>
-        )}
+        <div className="mt-4 flex items-center justify-between text-sm opacity-80 px-1">
+          <div>{enteredCount} item(s) with counts entered</div>
+          <button className="btn" disabled={saving || enteredCount === 0} onClick={submitCounts}>
+            {saving ? 'Submitting…' : 'Submit Counts'}
+          </button>
+        </div>
       </div>
     </div>
   )
