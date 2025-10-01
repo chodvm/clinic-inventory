@@ -180,4 +180,63 @@ export default function InventoryList() {
           {visibleItems.map(it => {
             const low = typeof it.par_level_min === 'number' && it.qty_on_hand <= (it.par_level_min ?? 0)
             return (
-              <div key={it.id} className="px-3
+              <div key={it.id} className="px-3 py-3 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+                {/* Name (3) */}
+                <div className="sm:col-span-3 min-w-0">
+                  <div className="font-medium truncate">{it.item_name}</div>
+                  {low && <span className="badge mt-1 inline-block">Low</span>}
+                </div>
+
+                {/* Category (2) — plain text */}
+                <div className="sm:col-span-2 text-sm">
+                  {it.categories?.name ?? '—'}
+                </div>
+
+                {/* Qty (1) — plain text */}
+                <div className="sm:col-span-1 sm:text-right text-sm">
+                  {it.qty_on_hand}
+                </div>
+
+                {/* Par (1) — plain text */}
+                <div className="sm:col-span-1 sm:text-right text-sm">
+                  {it.par_level_min ?? '—'}
+                </div>
+
+                {/* Location (2) — plain text */}
+                <div className="sm:col-span-2 text-sm">
+                  {it.storage_locations?.name ?? '—'}
+                </div>
+
+                {/* Reason (1) — to the LEFT of actions */}
+                <div className="sm:col-span-1">
+                  <select
+                    className="input w-full"
+                    value={reasonByItem[it.id] ?? ''}
+                    onChange={(e) => setReasonByItem(prev => ({ ...prev, [it.id]: e.target.value as ReasonCode }))}
+                  >
+                    <option value="">Reason…</option>
+                    {REASONS.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
+                  </select>
+                </div>
+
+                {/* Actions (2) — no overlap */}
+                <div className="sm:col-span-2 flex gap-2 justify-end">
+                  <button className="btn text-sm" onClick={() => adjustItem(it.id, +1)}>+1</button>
+                  <button className="btn text-sm" onClick={() => adjustItem(it.id, -1)}>−1</button>
+                  <Link href={`/items/${it.id}`} className="btn text-sm">Details</Link>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Pagination */}
+        {!filters.lowStockOnly && hasMore && (
+          <div className="mt-4 flex justify-center">
+            <button className="btn" disabled={loading} onClick={() => fetchPage(false)}>Load more</button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
