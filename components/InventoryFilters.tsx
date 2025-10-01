@@ -67,14 +67,6 @@ export default function InventoryFilters({
           {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
       </div>
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={value.lowStockOnly ?? false}
-          onChange={(e)=>onChange({ ...value, lowStockOnly: e.target.checked })}
-        />
-        <span className="text-sm">Low stock only</span>
-      </label>
       <div className="hidden md:block" />
     </div>
   )
