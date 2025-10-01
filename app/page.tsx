@@ -14,6 +14,7 @@ type Item = {
   storage_location_id: string | null
   category_id: string | null
   vendor_id: string | null
+  storage_locations?: { name: string } | null 
 }
 
 const PAGE_SIZE = 30
