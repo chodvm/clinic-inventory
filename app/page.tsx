@@ -23,6 +23,17 @@ const PAGE_SIZE = 30
 type SortKey = 'item_name' | 'qty_on_hand' | 'par_level_min'
 type SortDir = 'asc' | 'desc'
 
+// ✅ Standardized reasons (friendly label stored as code)
+const REASONS: { code: string; label: string }[] = [
+  { code: 'dispense',          label: 'Dispense' },
+  { code: 'administer',        label: 'Administer' },
+  { code: 'waste',             label: 'Waste' },
+  { code: 'expired',           label: 'Expired' },
+  { code: 'damaged',           label: 'Damaged' },
+  { code: 'count_adjustment',  label: 'Count Adjustment' },
+  { code: 'receive',           label: 'Receive/Restock' },
+]
+
 export default function InventoryList() {
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(false)
@@ -34,6 +45,9 @@ export default function InventoryList() {
   const [totalLoaded, setTotalLoaded] = useState(0)
   const [hasMore, setHasMore] = useState(true)
 
+  // Per-row selected reason
+  const [reasonByItem, setReasonByItem] = useState<Record<string, string>>({})
+
   const fetchPage = useCallback(async (reset = false) => {
     const sb = getSupabase()
     setLoading(true)
@@ -41,25 +55,19 @@ export default function InventoryList() {
     let query = sb
       .from('inventory_items')
       .select(
-        // include related names for category + location
         'id,item_name,sku,qty_on_hand,par_level_min,storage_location_id,category_id,vendor_id,categories(name),storage_locations(name)',
         { count: 'exact' }
       )
 
-    // Search (name or SKU)
     if (q && q.trim()) {
       query = query.or(`item_name.ilike.%${q}%,sku.ilike.%${q}%`)
     }
-
-    // Filters
     if (filters.categoryId) query = query.eq('category_id', filters.categoryId)
     if (filters.vendorId) query = query.eq('vendor_id', filters.vendorId)
     if (filters.locationId) query = query.eq('storage_location_id', filters.locationId)
 
-    // Sort
     query = query.order(sortKey, { ascending: sortDir === 'asc' })
 
-    // Pagination (disabled in low-stock-only view for correctness)
     const from = (reset ? 0 : page * PAGE_SIZE)
     const to = from + PAGE_SIZE - 1
     if (!filters.lowStockOnly) {
@@ -85,13 +93,9 @@ export default function InventoryList() {
     }
   }, [filters.categoryId, filters.vendorId, filters.locationId, filters.lowStockOnly, items, page, q, sortDir, sortKey])
 
-  // Initial load
-  useEffect(() => { fetchPage(true) }, []) // eslint-disable-line
+  useEffect(() => { fetchPage(true) }, []) // initial
+  useEffect(() => { fetchPage(true) }, [q, JSON.stringify(filters), sortKey, sortDir]) // on changes
 
-  // Re-fetch when search/filters/sort change
-  useEffect(() => { fetchPage(true) }, [q, JSON.stringify(filters), sortKey, sortDir]) // eslint-disable-line
-
-  // Client-side low stock view (qty_on_hand <= par_level_min)
   const visibleItems = useMemo(() => {
     if (!filters.lowStockOnly) return items
     return items.filter(it => typeof it.par_level_min === 'number' && it.qty_on_hand <= (it.par_level_min ?? 0))
@@ -102,14 +106,19 @@ export default function InventoryList() {
     [visibleItems]
   )
 
-  // Inline quick adjust (same row)
+  // Inline quick adjust (requires a selected reason)
   async function adjustItem(itemId: string, delta: number) {
-    const reason = window.prompt(`Reason for ${delta > 0 ? 'adding' : 'deducting'} ${Math.abs(delta)}?`)
-    if (!reason || !reason.trim()) return
+    const reason = reasonByItem[itemId]
+    if (!reason) {
+      alert('Please select a reason first.')
+      return
+    }
     const fn = delta > 0 ? 'add_inventory' : 'deduct_inventory'
     const { error } = await getSupabase().rpc(fn, { p_item_id: itemId, p_qty: Math.abs(delta), p_reason: reason })
     if (error) { alert(error.message); return }
     setItems(prev => prev.map(it => it.id === itemId ? { ...it, qty_on_hand: it.qty_on_hand + delta } : it))
+    // keep the selected reason to speed repeated actions; if you prefer to clear, uncomment:
+    // setReasonByItem(prev => ({ ...prev, [itemId]: '' }))
   }
 
   return (
@@ -154,14 +163,15 @@ export default function InventoryList() {
       </div>
 
       <div className="card">
-        {/* Header (12-column grid): Name(4) | Category(2) | Qty(1) | Par(1) | Location(2) | Actions(2) */}
+        {/* Header (12-col): Name(4) | Category(2) | Qty(1) | Par(1) | Location(2) | Reason(1) | Actions(1) */}
         <div className="hidden sm:grid grid-cols-12 gap-3 px-3 py-2 text-xs uppercase tracking-wide opacity-70">
           <div className="col-span-4">Name</div>
           <div className="col-span-2">Category</div>
           <div className="col-span-1 text-right">Qty</div>
           <div className="col-span-1 text-right">Par</div>
           <div className="col-span-2">Location</div>
-          <div className="col-span-2 text-right">Actions</div>
+          <div className="col-span-1">Reason</div>
+          <div className="col-span-1 text-right">Actions</div>
         </div>
 
         {/* Rows */}
@@ -203,8 +213,22 @@ export default function InventoryList() {
                   <span className="badge">{it.storage_locations?.name ?? '—'}</span>
                 </div>
 
-                {/* Actions (col 2) — now in the same row */}
-                <div className="sm:col-span-2 flex gap-2 justify-end">
+                {/* Reason (col 1) */}
+                <div className="sm:col-span-1">
+                  <select
+                    className="input"
+                    value={reasonByItem[it.id] ?? ''}
+                    onChange={(e) => setReasonByItem(prev => ({ ...prev, [it.id]: e.target.value }))}
+                  >
+                    <option value="">Reason…</option>
+                    {REASONS.map(r => (
+                      <option key={r.code} value={r.code}>{r.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Actions (col 1) — same row */}
+                <div className="sm:col-span-1 flex gap-2 justify-end">
                   <button className="btn text-sm" onClick={() => adjustItem(it.id, +1)}>+1</button>
                   <button className="btn text-sm" onClick={() => adjustItem(it.id, -1)}>−1</button>
                   <Link href={`/items/${it.id}`} className="btn text-sm">Details</Link>
@@ -224,3 +248,4 @@ export default function InventoryList() {
     </div>
   )
 }
+
