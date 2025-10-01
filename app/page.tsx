@@ -137,7 +137,7 @@ export default function InventoryList() {
         {loading && items.length === 0 && (<div className="opacity-80">Loading…</div>)}
         {!loading && visibleItems.length === 0 && (<div className="opacity-70">No matching items.</div>)}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3">
           {visibleItems.map(it => {
             const low = typeof it.par_level_min === 'number' && it.qty_on_hand <= (it.par_level_min ?? 0)
             return (
