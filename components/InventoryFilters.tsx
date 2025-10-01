@@ -75,7 +75,6 @@ export default function InventoryFilters({
         />
         <span className="text-sm">Low stock only</span>
       </label>
-      {/* spacer for layout */}
       <div className="hidden md:block" />
     </div>
   )
