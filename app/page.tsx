@@ -192,6 +192,11 @@ export default function InventoryList() {
                   {it.categories?.name ?? '—'}
                 </div>
 
+                {/* Location (2) — plain text */}
+                <div className="sm:col-span-2 text-sm">
+                  {it.storage_locations?.name ?? '—'}
+                </div>
+                
                 {/* Qty (1) — plain text */}
                 <div className="sm:col-span-1 sm:text-right text-sm">
                   {it.qty_on_hand}
@@ -200,11 +205,6 @@ export default function InventoryList() {
                 {/* Par (1) — plain text */}
                 <div className="sm:col-span-1 sm:text-right text-sm">
                   {it.par_level_min ?? '—'}
-                </div>
-
-                {/* Location (2) — plain text */}
-                <div className="sm:col-span-2 text-sm">
-                  {it.storage_locations?.name ?? '—'}
                 </div>
 
                 {/* Reason (1) — to the LEFT of actions */}
