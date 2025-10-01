@@ -2,33 +2,99 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==== Theme tokens (dark = default) ==== */
 :root {
+  /* surfaces & text */
   --bg: #0b1020;
   --card: #0f152c;
-  --text: #f7faff;
+  --fg: #f7faff;          /* main text */
+  --text: var(--fg);      /* alias for compatibility */
+
+  /* borders & accents */
+  --border: #2a3244;
+  --border-strong: #3a435a;
+
+  /* controls */
+  --field: rgba(255,255,255,0.06);
+  --field-border: rgba(255,255,255,0.14);
+  --badge-bg: rgba(255,255,255,0.06);
+  --badge-border: rgba(255,255,255,0.20);
+  --btn-bg: transparent;
+  --btn-border: rgba(255,255,255,0.20);
+  --btn-border-hover: rgba(255,255,255,0.40);
+
+  /* focus ring */
+  --ring: rgba(255,255,255,0.30);
 }
 
-html, body {
-  height: 100%;
+/* Light theme overrides (toggled by <html data-theme="light">) */
+html[data-theme='light'] {
+  --bg: #ffffff;
+  --card: #f7f9fc;
+  --fg: #0b1220;
+  --text: var(--fg);
+
+  --border: #d7deea;
+  --border-strong: #b7c4da;
+
+  --field: #eef2f7;
+  --field-border: #d7deea;
+  --badge-bg: #eef2f7;
+  --badge-border: #cfd8e6;
+  --btn-bg: #ffffff;
+  --btn-border: #cfd8e6;
+  --btn-border-hover: #9fb1cf;
+
+  --ring: rgba(16, 24, 40, 0.25);
 }
 
+/* ==== Base layout ==== */
+html, body { height: 100%; }
 body {
   background: var(--bg);
   color: var(--text);
 }
 
+/* ==== Utility wrappers (keep your Tailwind feel) ==== */
 .container {
   @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
 }
+
+/* Cards */
 .card {
-  @apply bg-white/5 backdrop-blur rounded-2xl shadow p-4 border border-white/10;
+  @apply rounded-2xl shadow p-4 border;
+  background: var(--card);
+  border-color: var(--border);
 }
+
+/* Buttons */
 .btn {
-  @apply inline-flex items-center justify-center rounded-xl px-3 py-2 font-medium border border-white/20 hover:border-white/40 transition;
+  @apply inline-flex items-center justify-center rounded-xl px-3 py-2 font-medium transition;
+  background: var(--btn-bg);
+  color: var(--fg);
+  border: 1px solid var(--btn-border);
 }
+.btn:hover { border-color: var(--btn-border-hover); }
+
+/* Inputs / selects */
 .input {
-  @apply w-full rounded-xl bg-white/10 border border-white/10 px-3 py-2 outline-none focus:ring-2 ring-white/30;
+  @apply w-full rounded-xl px-3 py-2 outline-none transition;
+  background: var(--field);
+  color: var(--fg);
+  border: 1px solid var(--field-border);
 }
+.input:focus {
+  /* Use a custom focus ring that works in both themes */
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+/* Badges / pills */
 .badge {
-  @apply inline-flex items-center rounded-full px-2 py-1 text-xs border border-white/20;
+  @apply inline-flex items-center rounded-full px-2 py-1 text-xs;
+  background: var(--badge-bg);
+  color: var(--fg);
+  border: 1px solid var(--badge-border);
 }
+
+/* Optional: make links inherit theme color nicely */
+a { color: inherit; }
