@@ -100,10 +100,12 @@ export default function InventoryList() {
 
   return (
     <div className="space-y-4">
+      {/* HEADER: Inventory title + Search + Theme toggle */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-semibold">Inventory</h1>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <SearchBar onSearch={setQ} />
+          <ThemeToggle />
         </div>
       </div>
 
