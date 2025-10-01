@@ -105,7 +105,6 @@ export default function InventoryList() {
         <h1 className="text-2xl font-semibold">Inventory</h1>
         <div className="flex items-center gap-2">
           <SearchBar onSearch={setQ} />
-          <ThemeToggle />
         </div>
       </div>
 
