@@ -16,7 +16,6 @@ export default function SearchBar({
     if (autoFocus && inputRef.current) inputRef.current.focus()
   }, [autoFocus])
 
-  // Debounce as-you-type
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => onSearch(q), 250)
