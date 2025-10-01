@@ -5,6 +5,7 @@ import Link from 'next/link'
 import SearchBar from '@/components/SearchBar'
 import InventoryFilters, { type Filters } from '@/components/InventoryFilters'
 import { getSupabase } from '@/lib/supabaseClient'
+import { REASONS, type ReasonCode } from '@/lib/reasons'
 
 type Item = {
   id: string
@@ -23,17 +24,6 @@ const PAGE_SIZE = 30
 type SortKey = 'item_name' | 'qty_on_hand' | 'par_level_min'
 type SortDir = 'asc' | 'desc'
 
-// ✅ Standardized reasons (friendly label stored as code)
-const REASONS: { code: string; label: string }[] = [
-  { code: 'dispense',          label: 'Dispense' },
-  { code: 'administer',        label: 'Administer' },
-  { code: 'waste',             label: 'Waste' },
-  { code: 'expired',           label: 'Expired' },
-  { code: 'damaged',           label: 'Damaged' },
-  { code: 'count_adjustment',  label: 'Count Adjustment' },
-  { code: 'receive',           label: 'Receive/Restock' },
-]
-
 export default function InventoryList() {
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(false)
@@ -45,8 +35,8 @@ export default function InventoryList() {
   const [totalLoaded, setTotalLoaded] = useState(0)
   const [hasMore, setHasMore] = useState(true)
 
-  // Per-row selected reason
-  const [reasonByItem, setReasonByItem] = useState<Record<string, string>>({})
+  // Per-row selected reason (standardized)
+  const [reasonByItem, setReasonByItem] = useState<Record<string, ReasonCode | ''>>({})
 
   const fetchPage = useCallback(async (reset = false) => {
     const sb = getSupabase()
@@ -59,15 +49,20 @@ export default function InventoryList() {
         { count: 'exact' }
       )
 
+    // Search (name or SKU)
     if (q && q.trim()) {
       query = query.or(`item_name.ilike.%${q}%,sku.ilike.%${q}%`)
     }
+
+    // Filters
     if (filters.categoryId) query = query.eq('category_id', filters.categoryId)
     if (filters.vendorId) query = query.eq('vendor_id', filters.vendorId)
     if (filters.locationId) query = query.eq('storage_location_id', filters.locationId)
 
+    // Sort
     query = query.order(sortKey, { ascending: sortDir === 'asc' })
 
+    // Pagination (disabled in low-stock-only view for correctness)
     const from = (reset ? 0 : page * PAGE_SIZE)
     const to = from + PAGE_SIZE - 1
     if (!filters.lowStockOnly) {
@@ -93,9 +88,13 @@ export default function InventoryList() {
     }
   }, [filters.categoryId, filters.vendorId, filters.locationId, filters.lowStockOnly, items, page, q, sortDir, sortKey])
 
-  useEffect(() => { fetchPage(true) }, []) // initial
-  useEffect(() => { fetchPage(true) }, [q, JSON.stringify(filters), sortKey, sortDir]) // on changes
+  // Initial load
+  useEffect(() => { fetchPage(true) }, []) // eslint-disable-line
 
+  // Re-fetch when search/filters/sort change
+  useEffect(() => { fetchPage(true) }, [q, JSON.stringify(filters), sortKey, sortDir]) // eslint-disable-line
+
+  // Client-side low stock view (qty_on_hand <= par_level_min)
   const visibleItems = useMemo(() => {
     if (!filters.lowStockOnly) return items
     return items.filter(it => typeof it.par_level_min === 'number' && it.qty_on_hand <= (it.par_level_min ?? 0))
@@ -117,8 +116,6 @@ export default function InventoryList() {
     const { error } = await getSupabase().rpc(fn, { p_item_id: itemId, p_qty: Math.abs(delta), p_reason: reason })
     if (error) { alert(error.message); return }
     setItems(prev => prev.map(it => it.id === itemId ? { ...it, qty_on_hand: it.qty_on_hand + delta } : it))
-    // keep the selected reason to speed repeated actions; if you prefer to clear, uncomment:
-    // setReasonByItem(prev => ({ ...prev, [itemId]: '' }))
   }
 
   return (
@@ -218,7 +215,7 @@ export default function InventoryList() {
                   <select
                     className="input"
                     value={reasonByItem[it.id] ?? ''}
-                    onChange={(e) => setReasonByItem(prev => ({ ...prev, [it.id]: e.target.value }))}
+                    onChange={(e) => setReasonByItem(prev => ({ ...prev, [it.id]: e.target.value as ReasonCode }))}
                   >
                     <option value="">Reason…</option>
                     {REASONS.map(r => (
@@ -248,4 +245,3 @@ export default function InventoryList() {
     </div>
   )
 }
-
