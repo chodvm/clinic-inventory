@@ -15,7 +15,8 @@ type Item = {
   storage_location_id: string | null
   category_id: string | null
   vendor_id: string | null
-  storage_locations?: { name: string } | null  // for Location column
+  storage_locations?: { name: string } | null   // Location column
+  categories?: { name: string } | null         // Category next to name
 }
 
 const PAGE_SIZE = 30
@@ -40,7 +41,8 @@ export default function InventoryList() {
     let query = sb
       .from('inventory_items')
       .select(
-        'id,item_name,sku,qty_on_hand,par_level_min,storage_location_id,category_id,vendor_id,storage_locations(name)',
+        // include related names for category + location
+        'id,item_name,sku,qty_on_hand,par_level_min,storage_location_id,category_id,vendor_id,categories(name),storage_locations(name)',
         { count: 'exact' }
       )
 
@@ -100,7 +102,7 @@ export default function InventoryList() {
     [visibleItems]
   )
 
-  // Inline quick adjust
+  // Inline quick adjust (same row)
   async function adjustItem(itemId: string, delta: number) {
     const reason = window.prompt(`Reason for ${delta > 0 ? 'adding' : 'deducting'} ${Math.abs(delta)}?`)
     if (!reason || !reason.trim()) return
@@ -114,7 +116,6 @@ export default function InventoryList() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-semibold">Inventory</h1>
-        {/* Debounced search lives in SearchBar */}
         <SearchBar onSearch={setQ} />
       </div>
 
@@ -153,12 +154,14 @@ export default function InventoryList() {
       </div>
 
       <div className="card">
-        {/* Header */}
+        {/* Header (12-column grid): Name(4) | Category(2) | Qty(1) | Par(1) | Location(2) | Actions(2) */}
         <div className="hidden sm:grid grid-cols-12 gap-3 px-3 py-2 text-xs uppercase tracking-wide opacity-70">
-          <div className="col-span-6">Name</div>
-          <div className="col-span-2 text-right">Qty</div>
-          <div className="col-span-2 text-right">Par</div>
+          <div className="col-span-4">Name</div>
+          <div className="col-span-2">Category</div>
+          <div className="col-span-1 text-right">Qty</div>
+          <div className="col-span-1 text-right">Par</div>
           <div className="col-span-2">Location</div>
+          <div className="col-span-2 text-right">Actions</div>
         </div>
 
         {/* Rows */}
@@ -174,29 +177,34 @@ export default function InventoryList() {
             const low = typeof it.par_level_min === 'number' && it.qty_on_hand <= (it.par_level_min ?? 0)
             return (
               <div key={it.id} className="px-3 py-3 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
-                {/* Name */}
-                <div className="sm:col-span-6">
-                  <div className="font-medium">{it.item_name}</div>
+                {/* Name (col 4) */}
+                <div className="sm:col-span-4 min-w-0">
+                  <div className="font-medium truncate">{it.item_name}</div>
                   {low && <span className="badge mt-1 inline-block">Low</span>}
                 </div>
 
-                {/* Qty */}
-                <div className="sm:col-span-2 sm:text-right">
+                {/* Category (col 2) */}
+                <div className="sm:col-span-2">
+                  <span className="badge">{it.categories?.name ?? '—'}</span>
+                </div>
+
+                {/* Qty (col 1) */}
+                <div className="sm:col-span-1 sm:text-right">
                   <span className="badge">{it.qty_on_hand}</span>
                 </div>
 
-                {/* Par */}
-                <div className="sm:col-span-2 sm:text-right">
+                {/* Par (col 1) */}
+                <div className="sm:col-span-1 sm:text-right">
                   <span className="badge">{it.par_level_min ?? '—'}</span>
                 </div>
 
-                {/* Location */}
+                {/* Location (col 2) */}
                 <div className="sm:col-span-2">
                   <span className="badge">{it.storage_locations?.name ?? '—'}</span>
                 </div>
 
-                {/* Actions */}
-                <div className="sm:col-span-12 flex gap-2 justify-end">
+                {/* Actions (col 2) — now in the same row */}
+                <div className="sm:col-span-2 flex gap-2 justify-end">
                   <button className="btn text-sm" onClick={() => adjustItem(it.id, +1)}>+1</button>
                   <button className="btn text-sm" onClick={() => adjustItem(it.id, -1)}>−1</button>
                   <Link href={`/items/${it.id}`} className="btn text-sm">Details</Link>
