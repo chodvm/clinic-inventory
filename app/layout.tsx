@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import ThemeToggle from '@/components/ThemeToggle'
 
 export const metadata: Metadata = {
   title: 'Urgent Care Inventory',
@@ -8,17 +9,37 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
+      <head>
+        {/* Set theme ASAP from saved preference or system setting (prevents flash) */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+(function () {
+  try {
+    var t = localStorage.getItem('theme');
+    if (!t) {
+      t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    }
+    document.documentElement.dataset.theme = t;
+  } catch (e) {}
+})();
+            `.trim()
+          }}
+        />
+      </head>
       <body>
         <header className="border-b border-white/10">
           <div className="container py-4 flex items-center gap-4">
             <div className="text-lg font-semibold">🩺 Urgent Care Inventory</div>
-            <nav className="ml-auto flex gap-3 text-sm">
+            <nav className="ml-auto flex gap-3 text-sm items-center">
               <a className="btn" href="/">Inventory</a>
               <a className="btn" href="/counts">Counts</a>
               <a className="btn" href="/transactions">Transactions</a>
               <a className="btn" href="/po">POs</a>
               <a className="btn" href="/admin">Admin</a>
+              {/* Theme toggle button */}
+              <ThemeToggle />
             </nav>
           </div>
         </header>
