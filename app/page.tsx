@@ -6,6 +6,7 @@ import SearchBar from '@/components/SearchBar'
 import InventoryFilters, { type Filters } from '@/components/InventoryFilters'
 import { getSupabase } from '@/lib/supabaseClient'
 import { REASONS, type ReasonCode } from '@/lib/reasons'
+import ThemeToggle from '@/components/ThemeToggle'
 
 type Item = {
   id: string
