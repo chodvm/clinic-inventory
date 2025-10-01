@@ -36,8 +36,8 @@ export default function InventoryList() {
     const sb = getSupabase()
     setLoading(true)
 
-    let query = sb.from('inventory_items')
-      .select('id,item_name,sku,qty_on_hand,par_level_min,storage_location_id,category_id,vendor_id', { count: 'exact' })
+    let query = getSupabase().from('inventory_items')
+      .select('id,item_name,sku,qty_on_hand,par_level_min,storage_location_id,category_id,vendor_id,storage_locations(name)', { count: 'exact' })
 
     if (q && q.trim()) {
       query = query.or(`item_name.ilike.%${q}%,sku.ilike.%${q}%`)
